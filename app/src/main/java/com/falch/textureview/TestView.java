@@ -22,96 +22,14 @@ import javax.microedition.khronos.egl.EGLDisplay;
 import javax.microedition.khronos.egl.EGLSurface;
 
 public class TestView extends LinearLayout implements TextureView.SurfaceTextureListener {
-    class RenderThread extends Thread {
-        private static final int EGL_CONTEXT_CLIENT_VERSION = 0x3098;
-        private static final int EGL_OPENGL_ES2_BIT = 4;
 
-        boolean isStopped = false;
-
-        SurfaceTexture mSurface;
-
-        RenderThread(SurfaceTexture surface) {
-            mSurface = surface;
-        }
-
-        private int[] getConfig() {
-            return new int[] {
-                    EGL10.EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
-                    EGL10.EGL_RED_SIZE, 8,
-                    EGL10.EGL_GREEN_SIZE, 8,
-                    EGL10.EGL_BLUE_SIZE, 8,
-                    EGL10.EGL_ALPHA_SIZE, 8,
-                    EGL10.EGL_DEPTH_SIZE, 0,
-                    EGL10.EGL_STENCIL_SIZE, 0,
-                    EGL10.EGL_NONE
-            };
-        }
-
-        @Override
-        public void run() {
-            super.run();
-
-            EGL10 egl = (EGL10) EGLContext.getEGL();
-            EGLDisplay eglDisplay = egl.eglGetDisplay(EGL_DEFAULT_DISPLAY);
-
-            int[] version = new int[2];
-            egl.eglInitialize(eglDisplay, version);   // getting OpenGL ES 2
-            EGLConfig eglConfig = chooseEglConfig(egl, eglDisplay);
-
-            int[] attrib_list = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL10.EGL_NONE };
-            EGLContext eglContext = egl.eglCreateContext(eglDisplay, eglConfig,
-                    EGL_NO_CONTEXT, attrib_list);
-
-            EGLSurface eglSurface = egl.eglCreateWindowSurface(eglDisplay, eglConfig, mSurface, null);
-
-            float colorVelocity = 0.01f;
-            float color = 0.5f;
-
-            egl.eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext);
-
-            while (!isStopped && egl.eglGetError() == EGL_SUCCESS) {
-
-                if (color > 1 || color < 0) colorVelocity *= -1;
-                color += colorVelocity;
-
-                GLES20.glClearColor(color / 2, color, color, 1.0f);
-                GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
-                egl.eglSwapBuffers(eglDisplay, eglSurface);
-
-                Log.i("SkiaBaseView", "Render using renderer thread.");
-
-                try {
-                    Thread.sleep((int) (1f / 60f * 1000f)); // in real life this sleep is more complicated
-                } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
-                }
-            }
-
-            mSurface.release();
-            egl.eglDestroyContext(eglDisplay, eglContext);
-            egl.eglDestroySurface(eglDisplay, eglSurface);
-        }
-
-        private EGLConfig chooseEglConfig(EGL10 egl, EGLDisplay eglDisplay) {
-            int[] configsCount = new int[1];
-            EGLConfig[] configs = new EGLConfig[1];
-            int[] configSpec = getConfig();
-
-            if (!egl.eglChooseConfig(eglDisplay, configSpec, configs, 1, configsCount)) {
-                throw new IllegalArgumentException("eglChooseConfig failed " +
-                        GLUtils.getEGLErrorString(egl.eglGetError()));
-            } else if (configsCount[0] > 0) {
-                return configs[0];
-            }
-            return null;
-        }
-    }
+    private static final int EGL_CONTEXT_CLIENT_VERSION = 0x3098;
+    private static final int EGL_OPENGL_ES2_BIT = 4;
 
     private TextureView mTextureView;
 
     private Button mColorView;
 
-    private RenderThread renderer;
 
     public TestView(Context context) {
         super(context);
@@ -141,9 +59,6 @@ public class TestView extends LinearLayout implements TextureView.SurfaceTexture
 
         mTextureView.setSurfaceTextureListener(this);
         mTextureView.setOpaque(false);
-
-        //mTextureView.layout(50, 50, 50, this.getMeasuredHeight()-50);
-        //mColorView.layout(50, 50, 50, this.getMeasuredHeight()-50);
     }
 
     void removeTextureView() {
@@ -153,11 +68,70 @@ public class TestView extends LinearLayout implements TextureView.SurfaceTexture
         mColorView = null;
     }
 
+    private int[] getConfig() {
+        return new int[] {
+                EGL10.EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
+                EGL10.EGL_RED_SIZE, 8,
+                EGL10.EGL_GREEN_SIZE, 8,
+                EGL10.EGL_BLUE_SIZE, 8,
+                EGL10.EGL_ALPHA_SIZE, 8,
+                EGL10.EGL_DEPTH_SIZE, 0,
+                EGL10.EGL_STENCIL_SIZE, 0,
+                EGL10.EGL_NONE
+        };
+    }
+
+    private EGLConfig chooseEglConfig(EGL10 egl, EGLDisplay eglDisplay) {
+        int[] configsCount = new int[1];
+        EGLConfig[] configs = new EGLConfig[1];
+        int[] configSpec = getConfig();
+
+        if (!egl.eglChooseConfig(eglDisplay, configSpec, configs, 1, configsCount)) {
+            throw new IllegalArgumentException("eglChooseConfig failed " +
+                    GLUtils.getEGLErrorString(egl.eglGetError()));
+        } else if (configsCount[0] > 0) {
+            return configs[0];
+        }
+        return null;
+    }
+
+    public void render(SurfaceTexture surface) {
+
+        EGL10 egl = (EGL10) EGLContext.getEGL();
+        EGLDisplay eglDisplay = egl.eglGetDisplay(EGL_DEFAULT_DISPLAY);
+
+        int[] version = new int[2];
+        egl.eglInitialize(eglDisplay, version);   // getting OpenGL ES 2
+        EGLConfig eglConfig = chooseEglConfig(egl, eglDisplay);
+
+        int[] attrib_list = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL10.EGL_NONE };
+        EGLContext eglContext = egl.eglCreateContext(eglDisplay, eglConfig,
+                EGL_NO_CONTEXT, attrib_list);
+
+        EGLSurface eglSurface = egl.eglCreateWindowSurface(eglDisplay, eglConfig, surface, null);
+
+        float color = 0.5f;
+
+        egl.eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext);
+
+        GLES20.glClearColor(color / 2, color, color, 1.0f);
+        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+        egl.eglSwapBuffers(eglDisplay, eglSurface);
+
+        try {
+            Thread.sleep((int) (1f / 60f * 1000f)); // in real life this sleep is more complicated
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+
+        egl.eglDestroyContext(eglDisplay, eglContext);
+        egl.eglDestroySurface(eglDisplay, eglSurface);
+    }
+
     @Override
     public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
         Log.i("SkiaBaseView", "onSurfaceTextAvailable - rendering OpenGL");
-        renderer = new RenderThread(surface);
-        renderer.start();
+        render(surface);
         Log.i("SkiaBaseView", "onSurfaceTextAvailable - done.");
     }
 
@@ -168,8 +142,7 @@ public class TestView extends LinearLayout implements TextureView.SurfaceTexture
 
     @Override
     public boolean onSurfaceTextureDestroyed(SurfaceTexture surface) {
-        renderer.isStopped = true;
-        return false;                // surface.release() manually, after the last render
+        return true;                // surface.release() manually, after the last render
     }
 
     @Override
